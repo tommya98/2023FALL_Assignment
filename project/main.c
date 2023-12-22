@@ -71,14 +71,17 @@ QueueHandle_t fontQueue = NULL;
 SemaphoreHandle_t rowSemPtr = NULL;
 TimerHandle_t rowTimer;
 TimerHandle_t colTimer;
+TimerHandle_t BtnTimer;
 
 char student_id[8] = "20181536";
 int displayMode = 0;
 int colIdx = 0;
 int timestamp = 0;
+int flagBtn = 0;
 
 void rowTimerCallback(TimerHandle_t xTimer);
 void colTimerCallback(TimerHandle_t xTimer);
+void BtnTimerCallback(TimerHandle_t xTimer);
 void fontInitTask(void * NotUsed);
 void rowShiftTask(void * NotUsed);
 
@@ -93,6 +96,7 @@ int main(void)
 
   rowTimer = xTimerCreate("RowTimer", pdMS_TO_TICKS(1), pdTRUE, (void *)0 , rowTimerCallback);
   colTimer = xTimerCreate("ColTimer1", pdMS_TO_TICKS(1000 / 18), pdTRUE, (void *)0, colTimerCallback);
+  BtnTimer = xTimerCreate("BtnTimer", pdMS_TO_TICKS(200), pdFALSE, (void *)0 , BtnTimerCallback);
 
   fontQueue = xQueueCreate(QUEUE_LENGTH, sizeof(char (*)[8]));
   rowSemPtr = xSemaphoreCreateBinary();
@@ -120,14 +124,17 @@ int main(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	BaseType_t xTaskWokenByReceive = pdFALSE;
+	BaseType_t xTaskWokenByReceive2 = pdFALSE;
 
-	if(GPIO_Pin == USER_Btn_Pin) {
+	if(GPIO_Pin == USER_Btn_Pin && flagBtn == 0) {
 		displayMode = (displayMode + 1) % 3;
 		if(displayMode == 0) colIdx = 0;
 		else if(displayMode == 1) colIdx = 64;
 		char (*fontPtr)[8] = (displayMode == 0) ? font8x8 : font7x7;
 		xQueueSendFromISR(fontQueue, &fontPtr, &xTaskWokenByReceive);
 		timestamp = 0;
+		flagBtn = 1;
+		xTimerStartFromISR(BtnTimer, xTaskWokenByReceive2);
 	}
 }
 
@@ -146,6 +153,10 @@ void colTimerCallback(TimerHandle_t xTimer) {
 	else if(displayMode == 2) {
 		colIdx = (colIdx + 1) % 72;
 	}
+}
+
+void BtnTimerCallback(TimerHandle_t xTimer) {
+	flagBtn = 0;
 }
 
 void fontInitTask(void * NotUsed) {
